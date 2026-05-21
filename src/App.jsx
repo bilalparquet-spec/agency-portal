@@ -633,6 +633,9 @@ function AgencyPortal({lang,agency,bookings,setBookings,convs,setConvs,userCars,
             ? <img src={agencyProfile.logoPreview} alt="" style={{width:34,height:34,borderRadius:9,objectFit:"cover",border:"2px solid rgba(124,58,237,.4)"}}/>
             : <AgencyLogo agency={agency} size={34}/>}
           <div style={{fontSize:13,color:"rgba(255,255,255,.6)",display:"none"}} className="dko">{agencyProfile.displayName||lang==="ar"?agency.ar:agency.fr}</div>
+          <button onClick={()=>window.open("https://driverent-pi.vercel.app/","_blank")} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.3)",color:"#C084FC",padding:"7px 13px",borderRadius:9,cursor:"pointer",fontSize:12,fontWeight:700}}>
+            🏠 {lang==="ar"?"التطبيق الرئيسي":"App principale"}
+          </button>
           <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#FCA5A5",padding:"7px 13px",borderRadius:9,cursor:"pointer",fontSize:12,fontWeight:700}}>
             🚪 {l.logout}
           </button>
