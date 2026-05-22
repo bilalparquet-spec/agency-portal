@@ -201,54 +201,24 @@ function AgencyPortal({lang,agency,bookings,setBookings,convs,setConvs,userCars,
 
   useEffect(()=>{ chatEndRef.current?.scrollIntoView({behavior:"smooth"}); },[convs,activeConv]);
 
-  // ── Real-time: receive user messages from Supabase ──────────────────────────
+  // simulate incoming message every ~20s
   useEffect(()=>{
-    if(!currentAgency) return;
-
-    const channel = supabase
-      .channel("agency_messages_" + currentAgency.agencyId)
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages",
-          filter: `agency_id=eq.${currentAgency.agencyId}` },
-        (payload) => {
-          const row = payload.new;
-          if (row.sender !== "user") return; // skip own replies
-
-          const incomingMsg = {
-            id: row.id,
-            from: "user",
-            text: row.text,
-            time: new Date(row.created_at).toLocaleTimeString("fr-DZ", { hour:"2-digit", minute:"2-digit" }),
-            status: "delivered",
-          };
-
-          // Find or create conversation matching this conv
-          const convDbId = row.conversation_id;
-          const nid = row.id || Date.now();
-
-          setConvs(prev => {
-            // Try to match by conversation_id stored in conv
-            const idx = prev.findIndex(c => `conv_${row.user_id}_ag${currentAgency.agencyId}` === convDbId || c.id === parseInt(row.local_id));
-            if (idx >= 0) {
-              // Check not duplicate
-              if (prev[idx].msgs.find(m => m.id === row.id)) return prev;
-              const updated = prev.map((c,i) => i===idx ? {...c, msgs:[...c.msgs, incomingMsg]} : c);
-              return updated;
-            } else {
-              // New conversation from user
-              const newConv = { id: nid, agencyId: currentAgency.agencyId, msgs: [incomingMsg] };
-              return [...prev, newConv];
-            }
-          });
-
-          setToastNotifs(p=>[...p,{id:nid, text:row.text, convId:nid}]);
-          setTimeout(()=>setToastNotifs(p=>p.filter(n=>n.id!==nid)),4500);
-        }
-      )
-      .subscribe();
-
-    return () => { channel.unsubscribe(); };
-  }, [currentAgency?.agencyId]);
+    const REPLIES={ar:["شكراً على ردك السريع! 🙏","هل يمكنني رؤية صور السيارة؟","ما هي الأسعار للأسبوع القادم؟","هل السيارة متاحة يوم الجمعة؟","ممتاز! سأؤكد الحجز اليوم 👍"],fr:["Merci pour votre réponse! 🙏","Puis-je voir des photos?","Quels prix pour la semaine prochaine?","Disponible vendredi?","Parfait! Je confirme 👍"],en:["Thanks for the quick reply! 🙏","Can I see car photos?","Prices for next week?","Available Friday?","Great! Confirming today 👍"]};
+    const t=setInterval(()=>{
+      setConvs(prev=>{
+        if(!prev.length) return prev;
+        const idx=Math.floor(Math.random()*prev.length);
+        const conv=prev[idx];
+        const reps=REPLIES[lang]||REPLIES.ar;
+        const txt=reps[Math.floor(Math.random()*reps.length)];
+        const nid=Date.now();
+        setToastNotifs(p=>[...p,{id:nid,text:txt,convId:conv.id}]);
+        setTimeout(()=>setToastNotifs(p=>p.filter(n=>n.id!==nid)),4500);
+        return prev.map((c,i)=>i===idx?{...c,msgs:[...c.msgs,{id:nid,from:"user",text:txt,time:new Date().toLocaleTimeString("fr-DZ",{hour:"2-digit",minute:"2-digit"}),status:"delivered"}]}:c);
+      });
+    },20000);
+    return ()=>clearInterval(t);
+  },[lang]);
 
   const handleReplyChange=e=>{
     setReplyIn(e.target.value);
@@ -606,7 +576,7 @@ function AgencyPortal({lang,agency,bookings,setBookings,convs,setConvs,userCars,
   };
   const showNotif=msg=>{setNotif(msg);setTimeout(()=>setNotif(null),3000);};
 
-  const sendReply=async ()=>{
+  const sendReply=()=>{
     if(!replyIn.trim()&&!attachPreview) return;
     if(!activeConv) return;
     const txt=replyIn; setReplyIn("");
@@ -616,23 +586,6 @@ function AgencyPortal({lang,agency,bookings,setBookings,convs,setConvs,userCars,
     setConvs(p=>p.map(c=>c.id===activeConv?{...c,msgs:[...c.msgs,newMsg]}:c));
     const mid=newMsg.id;
     setTimeout(()=>setConvs(p=>p.map(c=>c.id===activeConv?{...c,msgs:c.msgs.map(m=>m.id===mid?{...m,status:"delivered"}:m)}:c)),800);
-
-    // Save agency reply to Supabase for real-time delivery to user
-    if(currentAgency) {
-      const convObj = convs.find(c=>c.id===activeConv);
-      if(convObj) {
-        // We don't know user_id here, use a generic conv key
-        const convDbId = `conv_unknown_ag${currentAgency.agencyId}_${convObj.id}`;
-        try {
-          await supabase.from("messages").insert({
-            conversation_id: convDbId,
-            sender: "agency",
-            text: txt,
-            agency_id: currentAgency.agencyId,
-          });
-        } catch(e) { console.warn("Supabase send error:", e); }
-      }
-    }
   };
 
   const activeConvObj=convs.find(c=>c.id===activeConv);
@@ -680,9 +633,6 @@ function AgencyPortal({lang,agency,bookings,setBookings,convs,setConvs,userCars,
             ? <img src={agencyProfile.logoPreview} alt="" style={{width:34,height:34,borderRadius:9,objectFit:"cover",border:"2px solid rgba(124,58,237,.4)"}}/>
             : <AgencyLogo agency={agency} size={34}/>}
           <div style={{fontSize:13,color:"rgba(255,255,255,.6)",display:"none"}} className="dko">{agencyProfile.displayName||lang==="ar"?agency.ar:agency.fr}</div>
-          <button onClick={()=>window.open("https://driverent-pi.vercel.app/","_blank")} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.3)",color:"#C084FC",padding:"7px 13px",borderRadius:9,cursor:"pointer",fontSize:12,fontWeight:700}}>
-            🏠 {lang==="ar"?"التطبيق الرئيسي":"App principale"}
-          </button>
           <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#FCA5A5",padding:"7px 13px",borderRadius:9,cursor:"pointer",fontSize:12,fontWeight:700}}>
             🚪 {l.logout}
           </button>
